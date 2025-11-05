@@ -1,0 +1,10 @@
+streamlit>=1.37
+pandas>=2.0
+numpy>=1.24
+altair>=5.0
+google-cloud-bigquery>=3.14
+db-dtypes>=1.2
+google-auth>=2.29
+google-auth-oauthlib>=1.2
+google-cloud-aiplatform>=1.64  
+vertexai>=1.64                 
