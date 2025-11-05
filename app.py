@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import altair as alt
 import streamlit as st
-from google.cloud import bigquery
+from google.cloud import bigquery, aiplatform
 from vertexai import init as vertex_init
 from vertexai.generative_models import GenerativeModel
 USE_GEMINI = True
@@ -18,6 +18,10 @@ PROJECT_ID = os.getenv("PROJECT_ID")
 DATASET_ID = os.getenv("DATASET_ID")
 LOCATION = os.getenv("LOCATION")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL")
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+
+bq = bigquery.Client(project=os.getenv("PROJECT_ID"))
+aiplatform.init(project=os.getenv("PROJECT_ID"), location=os.getenv("LOCATION"))
 
 TBL_LONG = f"`{PROJECT_ID}.{DATASET_ID}.hmis_solapur_long`"
 TBL_TS = f"`{PROJECT_ID}.{DATASET_ID}.immunisation_ts`"
