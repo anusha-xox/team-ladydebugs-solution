@@ -2,7 +2,7 @@
 import os
 
 # Ensure Google SDK does not try to discover universe via metadata server
-os.environ.setdefault("GOOGLE_CLOUD_UNIVERSE_DOMAIN", "googleapis.com")
+os.environ.setdefault("googleapis.com")
 
 # ------------------------------ Imports ------------------------------
 from datetime import datetime
