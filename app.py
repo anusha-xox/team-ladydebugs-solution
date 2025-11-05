@@ -9,7 +9,8 @@ from vertexai import init as vertex_init
 from vertexai.generative_models import GenerativeModel
 USE_GEMINI = True
 from dotenv import load_dotenv
-import os, base64
+import os
+import base64
 load_dotenv()
 
 st.set_page_config(page_title="AI Governance • Health Forecasts", page_icon="🩺", layout="wide")
@@ -18,11 +19,44 @@ PROJECT_ID = os.getenv("PROJECT_ID")
 DATASET_ID = os.getenv("DATASET_ID")
 LOCATION = os.getenv("LOCATION")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL")
-# b64 = os.getenv("GOOGLE_CREDENTIALS_BASE64")
-# if b64:
-#     sa_path = "sa.json"
-#     with open(sa_path, "w") as f:
-#         f.write(base64.b64decode(b64).decode())
+# --- GOOGLE AUTH BOILERPLATE (place this at very top of app.py) ---
+import os
+import base64
+import pathlib
+import sys
+
+import os, json, base64
+from google.cloud import bigquery
+from google.oauth2 import service_account
+
+def _make_bq_client(project_id: str) -> bigquery.Client:
+    cred_env = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    creds = None
+
+    if cred_env:
+        s = cred_env.strip()
+        try:
+            # Case 1: raw JSON
+            if s.startswith("{"):
+                info = json.loads(s)
+                creds = service_account.Credentials.from_service_account_info(info)
+            # Case 2: base64-encoded JSON
+            elif s[:10].isalnum():  # quick check; you can do stricter base64 detection if you want
+                decoded = base64.b64decode(s).decode("utf-8")
+                info = json.loads(decoded)
+                creds = service_account.Credentials.from_service_account_info(info)
+            else:
+                # Case 3: assume it is a path to JSON file
+                creds = None  # SDK will read the file at that path automatically
+        except Exception:
+            # If parsing fails, fall back to default behavior (path or ADC)
+            creds = None
+
+    return bigquery.Client(project=project_id, credentials=creds)
+
+# usage
+client = _make_bq_client(PROJECT_ID)
+
 
 TBL_LONG = f"`{PROJECT_ID}.{DATASET_ID}.hmis_solapur_long`"
 TBL_TS = f"`{PROJECT_ID}.{DATASET_ID}.immunisation_ts`"
@@ -39,16 +73,69 @@ if missing:
 
 from google.cloud import bigquery
 
+# --- AUTH HELPERS (put near top, after imports) ---
+import json, base64
+from google.oauth2 import service_account
+from google.cloud import bigquery
+import streamlit as st
+
+@st.cache_resource(show_spinner=False)
+def get_gcp_credentials():
+    """
+    Priority:
+    1) st.secrets["gcp_service_account"] (recommended on Streamlit Cloud)
+    2) GOOGLE_APPLICATION_CREDENTIALS env var:
+       - raw JSON
+       - base64 JSON
+       - path to file (let ADC load)
+    3) None  -> fall back to ADC on local dev
+    """
+    # 1) Streamlit Cloud: put full service account JSON under st.secrets["gcp_service_account"]
+    if "gcp_service_account" in st.secrets:
+        info = st.secrets["gcp_service_account"]
+        # st.secrets may store it as dict already; if it’s a string, parse JSON:
+        if isinstance(info, str):
+            info = json.loads(info)
+        return service_account.Credentials.from_service_account_info(info)
+
+    # 2) Env var path / json / base64
+    s = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    if s:
+        s = s.strip()
+        try:
+            if s.startswith("{"):
+                return service_account.Credentials.from_service_account_info(json.loads(s))
+            # quick base64 check; if it decodes to JSON, use it
+            try:
+                decoded = base64.b64decode(s).decode("utf-8")
+                return service_account.Credentials.from_service_account_info(json.loads(decoded))
+            except Exception:
+                pass
+            # else treat as a path; returning None lets GCP SDK read from that path automatically
+            return None
+        except Exception:
+            return None
+
+    # 3) fall back to ADC (gcloud auth application-default login on local)
+    return None
+
+
+@st.cache_resource(show_spinner=False)
+def make_bq_client(project_id: str) -> bigquery.Client:
+    creds = get_gcp_credentials()
+    return bigquery.Client(project=project_id, credentials=creds)
+
+
 @st.cache_data(show_spinner=False, ttl=300)
 def bq_df(sql: str, params: dict | None = None) -> pd.DataFrame:
-    client = bigquery.Client(project=PROJECT_ID)
+    client = make_bq_client(PROJECT_ID)
     job_config = bigquery.QueryJobConfig()
 
     if params:
         qparams = []
         for name, (ptype, value) in params.items():
-            if ptype.upper().startswith("ARRAY<"):  
-                elem_type = ptype[6:-1]             
+            if ptype.upper().startswith("ARRAY<"):
+                elem_type = ptype[6:-1]
                 qparams.append(bigquery.ArrayQueryParameter(name, elem_type, value))
             else:
                 qparams.append(bigquery.ScalarQueryParameter(name, ptype, value))
@@ -87,7 +174,7 @@ subs_df = bq_df(
 subdistrict_multi = st.sidebar.multiselect("Subdistricts", subs_df["subdistrict"].tolist(), default=subs_df["subdistrict"].tolist()[:6])
 
 st.sidebar.divider()
-# st.sidebar.write("Auth:", os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "ADC (gcloud)"))
+st.sidebar.write("Auth:", os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "ADC (gcloud)"))
 st.sidebar.write("Project:", PROJECT_ID)
 
 st.title("🩺 AI-Powered Health Forecasts • Solapur (Pilot)")
