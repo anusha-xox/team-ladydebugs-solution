@@ -9,7 +9,7 @@ from vertexai import init as vertex_init
 from vertexai.generative_models import GenerativeModel
 USE_GEMINI = True
 from dotenv import load_dotenv
-import os
+import os, base64
 load_dotenv()
 
 st.set_page_config(page_title="AI Governance • Health Forecasts", page_icon="🩺", layout="wide")
@@ -18,10 +18,11 @@ PROJECT_ID = os.getenv("PROJECT_ID")
 DATASET_ID = os.getenv("DATASET_ID")
 LOCATION = os.getenv("LOCATION")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL")
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-
-bq = bigquery.Client(project=os.getenv("PROJECT_ID"))
-aiplatform.init(project=os.getenv("PROJECT_ID"), location=os.getenv("LOCATION"))
+# b64 = os.getenv("GOOGLE_CREDENTIALS_BASE64")
+# if b64:
+#     sa_path = "sa.json"
+#     with open(sa_path, "w") as f:
+#         f.write(base64.b64decode(b64).decode())
 
 TBL_LONG = f"`{PROJECT_ID}.{DATASET_ID}.hmis_solapur_long`"
 TBL_TS = f"`{PROJECT_ID}.{DATASET_ID}.immunisation_ts`"
@@ -86,7 +87,7 @@ subs_df = bq_df(
 subdistrict_multi = st.sidebar.multiselect("Subdistricts", subs_df["subdistrict"].tolist(), default=subs_df["subdistrict"].tolist()[:6])
 
 st.sidebar.divider()
-st.sidebar.write("Auth:", os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "ADC (gcloud)"))
+# st.sidebar.write("Auth:", os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "ADC (gcloud)"))
 st.sidebar.write("Project:", PROJECT_ID)
 
 st.title("🩺 AI-Powered Health Forecasts • Solapur (Pilot)")
