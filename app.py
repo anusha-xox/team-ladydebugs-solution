@@ -42,49 +42,67 @@ UNIVERSE = "googleapis.com"
 @st.cache_resource(show_spinner=False)
 def get_gcp_credentials():
     """
-    Priority:
-      1) st.secrets['gcp_service_account'] (TOML table)
-      2) GOOGLE_APPLICATION_CREDENTIALS env var:
-           - raw JSON
-           - base64 JSON
-           - file path (use from_service_account_file)
-      3) None -> (we stop later to avoid metadata calls)
+    Build service-account creds without triggering metadata lookups and
+    without passing universe_domain twice.
     """
-    # 1) Streamlit Cloud secrets table
+    UNIVERSE = "googleapis.com"
+
+    # 1) Streamlit secrets
     if "gcp_service_account" in st.secrets:
         info = st.secrets["gcp_service_account"]
         if isinstance(info, str):
             info = json.loads(info)
-        return service_account.Credentials.from_service_account_info(
-            info, universe_domain=UNIVERSE
-        )
+        info = dict(info)  # make a copy
+        # If secrets already contains 'universe_domain', don't pass it again
+        if "universe_domain" in info and info["universe_domain"]:
+            return service_account.Credentials.from_service_account_info(info)
+        else:
+            return service_account.Credentials.from_service_account_info(
+                info, universe_domain=UNIVERSE
+            )
 
-    # 2) Env var variations
+    # 2) Env var fallback: path / raw JSON / base64 JSON
     s = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
     if s:
         s = s.strip()
         # Raw JSON
         if s.startswith("{"):
-            return service_account.Credentials.from_service_account_info(
-                json.loads(s), universe_domain=UNIVERSE
-            )
+            info = json.loads(s)
+            info = dict(info)
+            if "universe_domain" in info and info["universe_domain"]:
+                return service_account.Credentials.from_service_account_info(info)
+            else:
+                return service_account.Credentials.from_service_account_info(
+                    info, universe_domain=UNIVERSE
+                )
         # Base64 JSON?
         try:
             decoded = base64.b64decode(s).decode("utf-8")
-            return service_account.Credentials.from_service_account_info(
-                json.loads(decoded), universe_domain=UNIVERSE
-            )
+            info = json.loads(decoded)
+            info = dict(info)
+            if "universe_domain" in info and info["universe_domain"]:
+                return service_account.Credentials.from_service_account_info(info)
+            else:
+                return service_account.Credentials.from_service_account_info(
+                    info, universe_domain=UNIVERSE
+                )
         except Exception:
-            # Treat as a file path
+            # Treat as file path (library will read JSON). We can't pop keys here,
+            # so if the file already includes universe_domain, don't pass kwarg.
             try:
                 return service_account.Credentials.from_service_account_file(
                     s, universe_domain=UNIVERSE
                 )
-            except Exception:
-                pass
+            except TypeError:
+                # File likely already has universe_domain; call without kwarg.
+                return service_account.Credentials.from_service_account_file(s)
 
-    # 3) No creds -> return None and fail fast later (to avoid metadata probing)
-    return None
+    # 3) No creds found -> stop (prevents metadata probing on Streamlit Cloud)
+    st.error(
+        "No GCP credentials found. Add `[gcp_service_account]` to Streamlit Secrets "
+        "or set GOOGLE_APPLICATION_CREDENTIALS (raw/base64 JSON or file path)."
+    )
+    st.stop()
 
 
 @st.cache_resource(show_spinner=False)
