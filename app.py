@@ -1,10 +1,7 @@
-# ------------------------------ Bootstrap (before any GCP client creation) ------------------------------
 import os
 
-# Ensure Google SDK does not try to discover universe via metadata server
 os.environ.setdefault("googleapis.com", "googleapis.com")
 
-# ------------------------------ Imports ------------------------------
 from datetime import datetime
 import json
 import base64
@@ -19,13 +16,10 @@ from google.cloud import bigquery
 from vertexai import init as vertex_init
 from vertexai.generative_models import GenerativeModel
 
-# ------------------------------ App setup ------------------------------
-load_dotenv()  # optional; used only as a fallback if secrets are not present
+load_dotenv()  
 st.set_page_config(page_title="AI Governance • Health Forecasts", page_icon="🩺", layout="wide")
 
-# ------------------------------ Config (secrets first, then env) ------------------------------
 def _get_cfg(name: str, default: str | None = None) -> str | None:
-    # Prefer Streamlit secrets; fallback to environment; then default
     if name in st.secrets:
         return st.secrets[name]
     return os.getenv(name, default)
@@ -36,7 +30,6 @@ LOCATION     = _get_cfg("LOCATION", "us-central1")
 GEMINI_MODEL = _get_cfg("GEMINI_MODEL", "gemini-1.5-pro")
 USE_GEMINI   = str(_get_cfg("USE_GEMINI", "true")).lower() in ("1", "true", "yes")
 
-# ------------------------------ Credentials helpers ------------------------------
 UNIVERSE = "googleapis.com"
 
 @st.cache_resource(show_spinner=False)
@@ -47,13 +40,13 @@ def get_gcp_credentials():
     """
     UNIVERSE = "googleapis.com"
 
-    # 1) Streamlit secrets
+   
     if "gcp_service_account" in st.secrets:
         info = st.secrets["gcp_service_account"]
         if isinstance(info, str):
             info = json.loads(info)
-        info = dict(info)  # make a copy
-        # If secrets already contains 'universe_domain', don't pass it again
+        info = dict(info) 
+        
         if "universe_domain" in info and info["universe_domain"]:
             return service_account.Credentials.from_service_account_info(info)
         else:
@@ -61,11 +54,11 @@ def get_gcp_credentials():
                 info, universe_domain=UNIVERSE
             )
 
-    # 2) Env var fallback: path / raw JSON / base64 JSON
+    
     s = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
     if s:
         s = s.strip()
-        # Raw JSON
+        
         if s.startswith("{"):
             info = json.loads(s)
             info = dict(info)
@@ -75,7 +68,7 @@ def get_gcp_credentials():
                 return service_account.Credentials.from_service_account_info(
                     info, universe_domain=UNIVERSE
                 )
-        # Base64 JSON?
+       
         try:
             decoded = base64.b64decode(s).decode("utf-8")
             info = json.loads(decoded)
@@ -87,17 +80,16 @@ def get_gcp_credentials():
                     info, universe_domain=UNIVERSE
                 )
         except Exception:
-            # Treat as file path (library will read JSON). We can't pop keys here,
-            # so if the file already includes universe_domain, don't pass kwarg.
+            
             try:
                 return service_account.Credentials.from_service_account_file(
                     s, universe_domain=UNIVERSE
                 )
             except TypeError:
-                # File likely already has universe_domain; call without kwarg.
+                
                 return service_account.Credentials.from_service_account_file(s)
 
-    # 3) No creds found -> stop (prevents metadata probing on Streamlit Cloud)
+
     st.error(
         "No GCP credentials found. Add `[gcp_service_account]` to Streamlit Secrets "
         "or set GOOGLE_APPLICATION_CREDENTIALS (raw/base64 JSON or file path)."
@@ -116,7 +108,7 @@ def make_bq_client(project_id: str) -> bigquery.Client:
         st.stop()
     return bigquery.Client(project=project_id, credentials=creds)
 
-# ------------------------------ Query helper ------------------------------
+
 @st.cache_data(show_spinner=False, ttl=300)
 def bq_df(sql: str, params: dict | None = None) -> pd.DataFrame:
     client = make_bq_client(PROJECT_ID)
@@ -134,7 +126,7 @@ def bq_df(sql: str, params: dict | None = None) -> pd.DataFrame:
 
     return client.query(sql, job_config=job_config).result().to_dataframe()
 
-# ------------------------------ Tables / Views ------------------------------
+
 if not PROJECT_ID or not DATASET_ID:
     st.error("Missing config: set `PROJECT_ID` and `DATASET_ID` in secrets or env.")
     st.stop()
@@ -144,20 +136,20 @@ TBL_TS     = f"`{PROJECT_ID}.{DATASET_ID}.immunisation_ts`"
 TBL_FC_NEXT= f"`{PROJECT_ID}.{DATASET_ID}.immunisation_forecast_next`"
 VIEW_TOP5  = f"`{PROJECT_ID}.{DATASET_ID}.v_top5_immunisation_spikes`"
 
-# ------------------------------ UI helpers ------------------------------
+
 def kpi_card(col, label, value, help_text=None):
     col.metric(label, value if value is not None else "—", help=help_text)
 
 def month_order():
     return ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
 
-# ------------------------------ Sidebar ------------------------------
+
 st.sidebar.title("⚙️ Controls")
 st.sidebar.caption("Data source: BigQuery HMIS (Solapur, 12 months).")
 st.sidebar.write("Project:", PROJECT_ID)
 st.sidebar.write("Auth mode:", "Service Account (secrets)" if "gcp_service_account" in st.secrets else os.getenv("GOOGLE_APPLICATION_CREDENTIALS","ADC/None"))
 
-# Indicator list
+
 items_df = bq_df(
     f"""
     SELECT DISTINCT item
@@ -169,7 +161,7 @@ default_item = "M9 [CHILD IMMUNISATION]"
 default_idx = int(np.where(items_df["item"] == default_item)[0][0]) if default_item in items_df["item"].values else 0
 item_choice = st.sidebar.selectbox("Indicator", items_df["item"], index=default_idx)
 
-# Subdistrict list
+
 subs_df = bq_df(
     f"""
     SELECT DISTINCT subdistrict
@@ -184,11 +176,11 @@ subdistrict_multi = st.sidebar.multiselect(
     default=subs_df["subdistrict"].tolist()[:6]
 )
 
-# ------------------------------ Title ------------------------------
-st.title("🩺 AI-Powered Health Forecasts • Solapur (Pilot)")
+
+st.title("🩺 AI-Powered Health Forecasts • Solapur (2017-18)")
 st.caption("Predictive governance prototype using BigQuery ML + Streamlit")
 
-# ------------------------------ KPIs ------------------------------
+
 kpi_sql = f"""
 WITH monthly AS (
   SELECT
@@ -237,7 +229,7 @@ kpi_card(c3, "Growth vs Last Month", f"{growth*100:,.1f}%")
 
 st.divider()
 
-# ------------------------------ Top 5 changes ------------------------------
+
 st.subheader("📌 Top 5 subdistricts: expected change next month (Child Immunisation)")
 top5 = bq_df(f"SELECT * FROM {VIEW_TOP5}")
 left, mid = st.columns([1, 2])
@@ -261,7 +253,7 @@ with mid:
 
 st.divider()
 
-# ------------------------------ Trend ------------------------------
+
 st.subheader(f"📈 Monthly trend • {item_choice}")
 if len(subdistrict_multi) == 0:
     st.info("Select at least one subdistrict in the sidebar.")
@@ -298,7 +290,7 @@ else:
 
 st.divider()
 
-# ------------------------------ AI Insight (optional) ------------------------------
+
 st.subheader("🧠 AI Insight (optional)")
 user_q = st.text_input("Ask for a summary (e.g., 'Which subdistrict needs most attention next month and why?')", "")
 
