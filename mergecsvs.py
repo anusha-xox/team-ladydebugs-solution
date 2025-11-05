@@ -4,12 +4,12 @@ import pandas as pd
 import re
 from glob import glob
 
-# ---- CONFIG ----
+
 DATA_DIR = "/Users/anushajain/Desktop/google_genai_hack/data"      
 OUTPUT_PATH = "merged_12_months_hmis.csv"   
 DISTRICT_NAME = "Solapur"         
 
-# ---- HELPER FUNCTIONS ----
+
 def normalize_columns(df):
     """Standardize HMIS column names across months."""
     rename_map = {

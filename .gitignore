@@ -2,3 +2,4 @@ keys
 keys.pub
 .env
 sa.json
+.streamlit/secrets.toml

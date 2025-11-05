@@ -1,8 +1,7 @@
-#!/usr/bin/env python3
 import csv, re, sys, os
 
-INFILE  = "merged_12_months_hmis.csv"      # input file
-OUTFILE = "merged_12_months_hmis_clean.csv"  # output file
+INFILE  = "merged_12_months_hmis.csv"      
+OUTFILE = "merged_12_months_hmis_clean.csv" 
 
 allowed = re.compile(r'[^A-Za-z0-9_]+')
 
@@ -15,11 +14,11 @@ with open(INFILE, "r", newline="", encoding="utf-8") as fin, \
     new_header = []
     mapping = {}
     for col in header:
-        # BigQuery col rules: start with letter/underscore; only letters, numbers, underscores
+
         cleaned = allowed.sub("_", col).strip("_")
         if not cleaned or not re.match(r'^[A-Za-z_]', cleaned):
             cleaned = f"col_{cleaned or 'unnamed'}"
-        # avoid duplicate names by appending an index if needed
+
         base = cleaned
         i = 1
         while cleaned in new_header:
