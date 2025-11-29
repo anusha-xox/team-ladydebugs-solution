@@ -27,7 +27,7 @@ def _get_cfg(name: str, default: str | None = None) -> str | None:
 PROJECT_ID   = _get_cfg("PROJECT_ID")
 DATASET_ID   = _get_cfg("DATASET_ID")
 LOCATION     = _get_cfg("LOCATION", "us-central1")
-GEMINI_MODEL = _get_cfg("GEMINI_MODEL", "gemini-1.5-pro")
+GEMINI_MODEL = _get_cfg("GEMINI_MODEL", "gemini-3-pro-preview")
 USE_GEMINI   = str(_get_cfg("USE_GEMINI", "true")).lower() in ("1", "true", "yes")
 
 UNIVERSE = "googleapis.com"
@@ -291,7 +291,7 @@ else:
 st.divider()
 
 
-st.subheader("🧠 AI Insight (optional)")
+st.subheader("🧠 AI Insight")
 user_q = st.text_input("Ask for a summary (e.g., 'Which subdistrict needs most attention next month and why?')", "")
 
 if st.button("Generate Insight") or user_q:
@@ -305,13 +305,43 @@ if st.button("Generate Insight") or user_q:
         })
         ctx_json = ctx.to_dict(orient='records')
 
-        prompt = f"""
-You are an AI Health Governance advisor. Using the JSON below (top 5 subdistrict changes for next month) and the indicator "{item_choice}",
-write 3 concise, actionable recommendations for district officials. Be specific and avoid jargon.
+#         prompt = f"""
+# You are an AI Health Governance advisor. Using the JSON below (top 5 subdistrict changes for next month) and the indicator "{item_choice}",
+# write 3 concise, actionable recommendations for district officials. Be specific and avoid jargon.
 
-JSON:
+# JSON:
+# {ctx_json}
+# """
+        prompt = f"""
+You are an AI Health Governance Advisor tasked with helping district-level officials
+interpret immunisation trends and forecasts.
+
+Use the JSON data provided below — which contains the **top 5 subdistricts with the highest expected
+change next month** for the indicator "{item_choice}" — to generate a concise, data-grounded insight.
+
+### Your Tasks
+1. **Identify the top 2 subdistricts that require immediate attention**, explicitly quoting:
+   - last month's value
+   - next month's predicted value
+   - the absolute increase or decrease
+
+2. **Explain the trend in plain language** (no jargon), describing why these changes may matter
+   operationally (e.g., supply, staffing, outreach).
+
+3. **Provide 3 actionable recommendations**, each tied to specific numbers from the JSON.
+   Example format:
+   - "Shift ~1,200 extra vaccine doses due to a projected rise from 3,450 → 4,650 (+1,200)."
+
+### Requirements
+- Always include exact numbers from the JSON: LastMonth, Forecast, Change.
+- Be concise (6–8 sentences).
+- Avoid speculation; stay grounded only in the provided JSON.
+- Do NOT invent months or time periods — only reference “next month” and “last month.”
+
+### Data (JSON)
 {ctx_json}
 """
+
         if USE_GEMINI:
             creds = get_gcp_credentials()
             if creds is None:
